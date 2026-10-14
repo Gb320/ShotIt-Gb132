@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shot Planner</title>
+<style>
+  :root{--bg:#14171c;--panel:#1d2128;--line:#2c323c;--ink:#e8eaed;--muted:#8c95a3;--acc:#f2b134}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,"Segoe UI",Roboto,sans-serif;padding-bottom:64px}
+  body.dopen{padding-bottom:230px}
+  header,#music{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--line)}
+  .grow{flex:1}.muted{color:var(--muted);font-size:13px}
+  input,textarea{background:#101318;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit;width:100%}
+  textarea{resize:vertical;min-height:120px}
+  input[readonly],textarea[readonly]{border-color:transparent;background:transparent}
+  input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+  .ptitle{font-size:20px;font-weight:600;width:340px;background:none}
+  .btn,button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+  .btn:hover,button:hover:not(:disabled){border-color:var(--acc)}
+  button:disabled{opacity:.3;cursor:default}
+  .ro .edit{display:none!important}
+  #music{border-bottom:0;padding-bottom:0}#music input{max-width:420px}
+  #mplayer{display:flex;align-items:center;gap:10px}#mplayer audio{height:36px}#mplayer iframe{border:0;border-radius:6px}
+  #stage{display:flex;align-items:center;justify-content:center;gap:18px;padding:14px 20px 8px}
+  .nav{width:56px;height:56px;border-radius:50%;font-size:28px;padding:0;flex:none}
+  #media{position:relative;width:min(calc(100% - 150px),calc((100vh - 420px)*16/9));min-width:480px;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  #media iframe,#media img{width:100%;height:100%;border:0;object-fit:contain}
+  .empty{color:var(--muted);text-align:center;padding:20px}
+  .vt{position:absolute;top:8px;right:8px;display:flex;gap:4px}.vt button{padding:3px 10px;font-size:13px;background:#000a}.vt .on{background:var(--acc);color:#111;border-color:var(--acc)}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 20px}
+  .tools{display:flex;gap:8px;margin:6px auto 0}
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:14px auto 0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .panel h3{margin:0 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:8px;align-items:center}
+  .panel h3 .grow{flex:1}.panel h3 button{padding:2px 8px;font-size:12px;text-transform:none;letter-spacing:0}
+  .panel input[data-f=title]{font-size:17px;font-weight:600;margin-bottom:8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid label{font-size:12px;color:var(--muted)}.grid input{margin-top:3px;color:var(--ink)}
+  #drawer{position:fixed;left:0;right:0;bottom:0;background:#0e1115;border-top:1px solid var(--line);z-index:5}
+  #dtoggle{width:100%;border:0;border-radius:0;background:none;text-align:left;padding:10px 20px}
+  #strip{display:none;gap:10px;overflow-x:auto;padding:4px 20px 14px}.dopen #strip{display:flex}
+  .tile{flex:none;width:168px;cursor:pointer;border:2px solid transparent;border-radius:8px;background:var(--panel);overflow:hidden}
+  .tile.on{border-color:var(--acc)}
+  .tile .th{aspect-ratio:16/9;background:#000 center/cover;display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--muted)}
+  .tile .lb{padding:4px 8px;font-size:12px;display:flex;justify-content:space-between;gap:6px}
+  .tile .lb span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--acc);color:#111;padding:8px 16px;border-radius:8px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<header>
+  <input id="ptitle" class="ptitle" placeholder="Project title">
+  <span class="muted" id="total"></span>
+  <span class="grow"></span>
+  <button id="modeBtn">View mode</button>
+  <button id="exportBtn">Export</button>
+  <label class="btn edit">Import<input type="file" id="importF" accept=".json" hidden></label>
+</header>
+<div id="music">
+  <span>♪</span>
+  <span class="edit grow" style="display:flex;gap:8px;align-items:center">
+    <input id="msrc" placeholder="Soundtrack: YouTube link, or audio file path/URL (e.g. music/theme.mp3)">
+    <label class="btn">Audio file<input type="file" id="mfile" accept="audio/*" hidden></label>
+  </span>
+  <div id="mplayer"></div>
+</div>
+
+<section id="stage">
+  <button class="nav" id="prev" aria-label="Previous shot">‹</button>
+  <div id="media"></div>
+  <button class="nav" id="next" aria-label="Next shot">›</button>
+</section>
+
+<div class="wrap edit tools">
+  <label class="btn">Upload image<input type="file" id="imgF" accept="image/*" hidden></label>
+  <button id="rmImg">Remove image</button>
+  <input data-f="yt.url" placeholder="YouTube link (optional)">
+  <input data-f="yt.start" id="ystart" placeholder="Start 1:23" style="width:110px">
+  <input data-f="yt.end" placeholder="End 1:40" style="width:110px">
+  <button id="replay">Replay cut</button>
+</div>
+
+<section class="wrap panels">
+  <div class="panel">
+    <h3>Shot <span id="num"></span><span class="grow"></span>
+      <button class="edit" id="dup">Duplicate</button><button class="edit" id="del">Delete</button></h3>
+    <input data-f="title" placeholder="Shot title">
+    <textarea data-f="text" placeholder="Description, dialogue, directions for the team…"></textarea>
+  </div>
+  <div class="panel">
+    <h3>Shot info</h3>
+    <div class="grid" id="info"></div>
+  </div>
+</section>
+
+<div id="drawer">
+  <button id="dtoggle">▲ Shots <span class="muted" id="dcount"></span></button>
+  <div id="strip"></div>
+</div>
+<datalist id="sizes"><option>ECU</option><option>CU</option><option>MCU</option><option>MS</option><option>MLS</option><option>LS</option><option>ELS</option></datalist>
+<datalist id="moves"><option>Static</option><option>Pan</option><option>Tilt</option><option>Dolly</option><option>Handheld</option><option>Gimbal</option><option>Drone</option><option>Zoom</option></datalist>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const KEY = "shotplanner";
+const INFO = [["duration","Duration (s)"],["camera","Camera"],["lens","Lens"],["size","Shot size","sizes"],["angle","Angle"],["movement","Movement","moves"],["audio","Audio / music cue"],["location","Location"]];
+const blank = () => ({id:Math.random().toString(36).slice(2,9), title:"", text:"", img:"", view:"", yt:{url:"",id:"",start:"",end:""}, info:{}});
+let S = {title:"", music:{src:""}, shots:[blank()]}, cur = 0, RO = false, REMOTE = false, localAudio = null, saveT, dragI = null;
+
+function norm(d){
+  const o = {title:d.title||"", music:{src:(d.music&&d.music.src)||""}, shots:[]};
+  (d.shots||[]).forEach(s => { const b = blank(); o.shots.push(Object.assign(b, s, {yt:Object.assign(b.yt, s.yt||{}), info:s.info||{}})); });
+  if(!o.shots.length) o.shots.push(blank());
+  return o;
+}
+function toast(m){ const t = $("toast"); t.textContent = m; t.style.display = "block"; setTimeout(() => t.style.display = "none", 3500); }
+function save(){
+  if(REMOTE) return;
+  clearTimeout(saveT);
+  saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ toast("Browser storage is full. Export your project to keep it safe."); } }, 300);
+}
+const get = (o,p) => p.split(".").reduce((x,k) => x && x[k], o);
+function setp(o,p,v){ const a = p.split("."), l = a.pop(); a.reduce((x,k) => x[k] || (x[k] = {}), o)[l] = v; }
+const tsec = v => { v = String(v||"").trim(); if(!v) return null; if(v.includes(":")){ const p = v.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a,b) => a*60+b, 0); } const n = Number(v); return isNaN(n) ? null : Math.round(n); };
+const mmss = n => Math.floor(n/60) + ":" + String(Math.round(n%60)).padStart(2,"0");
+const ytId = u => { const m = String(u).match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/); return m ? m[1] : ""; };
+const ytT = u => { const m = String(u).match(/[?&](?:t|start)=(\d+)/); return m ? +m[1] : null; };
+function ytSrc(y, ap){
+  let q = "rel=0&modestbranding=1"; const a = tsec(y.start), b = tsec(y.end);
+  if(a != null) q += "&start=" + a; if(b != null) q += "&end=" + b; if(ap) q += "&autoplay=1";
+  return "https://www.youtube.com/embed/" + y.id + "?" + q;
+}
+
+function renderMedia(ap){
+  const s = S.shots[cur], hasI = !!s.img, hasY = !!s.yt.id;
+  let v = s.view; if(!(v==="img" && hasI) && !(v==="yt" && hasY)) v = hasY ? "yt" : "img";
+  let h = v === "yt" ? `<iframe src="${ytSrc(s.yt, ap)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`
+    : hasI ? `<img src="${s.img}" alt="">`
+    : `<div class="empty">${RO ? "No media for this shot" : "Drop, paste (Ctrl+V) or upload an image<br>or add a YouTube link below"}</div>`;
+  if(hasI && hasY) h += `<div class="vt"><button data-v="img" class="${v==="img"?"on":""}">Image</button><button data-v="yt" class="${v==="yt"?"on":""}">Video</button></div>`;
+  $("media").innerHTML = h;
+}
+function strip(){
+  $("strip").innerHTML = S.shots.map((s,i) => {
+    const th = s.img ? `background-image:url(${s.img})` : s.yt.id ? `background-image:url(https://img.youtube.com/vi/${s.yt.id}/mqdefault.jpg)` : "";
+    const d = parseFloat(s.info.duration);
+    return `<div class="tile ${i===cur?"on":""}" data-i="${i}" draggable="${!RO}"><div class="th" style="${th}">${th ? "" : i+1}</div><div class="lb"><span>${i+1}. ${esc(s.title||"Untitled")}</span><span>${d ? d+"s" : ""}</span></div></div>`;
+  }).join("") + (RO ? "" : `<div class="tile" id="addTile"><div class="th">+</div><div class="lb"><span>Add shot</span></div></div>`);
+}
+function stats(){
+  const sum = S.shots.reduce((a,s) => a + (parseFloat(s.info.duration) || 0), 0);
+  $("total").textContent = S.shots.length + (S.shots.length === 1 ? " shot" : " shots") + " · " + mmss(sum) + " runtime";
+  $("dcount").textContent = "(" + S.shots.length + ")";
+}
+function music(){
+  const src = S.music.src || ""; $("msrc").value = src;
+  const id = ytId(src); let h = "";
+  if(localAudio) h = `<audio controls src="${localAudio.url}"></audio><span class="muted">${esc(localAudio.name)} (this session only)</span>`;
+  else if(id){ const t = ytT(src); h = `<iframe width="220" height="124" src="https://www.youtube.com/embed/${id}?rel=0${t ? "&start="+t : ""}" allow="encrypted-media" allowfullscreen></iframe>`; }
+  else if(src) h = `<audio controls src="${esc(src)}"></audio>`;
+  $("mplayer").innerHTML = h;
+}
+function renderAll(){
+  const s = S.shots[cur], last = cur === S.shots.length - 1;
+  document.body.classList.toggle("ro", RO);
+  $("ptitle").value = S.title; $("ptitle").readOnly = RO; $("msrc").readOnly = RO;
+  document.querySelectorAll("[data-f]").forEach(el => { el.value = get(s, el.dataset.f) || ""; el.readOnly = RO; });
+  $("num").textContent = (cur+1) + " / " + S.shots.length;
+  $("prev").disabled = cur === 0;
+  $("next").textContent = last && !RO ? "+" : "›"; $("next").disabled = last && RO;
+  $("modeBtn").textContent = RO ? "Edit mode" : "View mode";
+  renderMedia(); strip(); stats();
+}
+function go(i){ cur = Math.max(0, Math.min(S.shots.length-1, i)); renderAll(); }
+function addShot(){ S.shots.push(blank()); cur = S.shots.length - 1; save(); renderAll(); document.querySelector("[data-f=title]").focus(); }
+function setImage(f){
+  if(!f || !f.type.startsWith("image/") || RO) return;
+  const r = new FileReader();
+  r.onload = () => { const im = new Image(); im.onload = () => {
+    const k = Math.min(1, 1280 / im.width), c = document.createElement("canvas");
+    c.width = im.width * k; c.height = im.height * k; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+    const s = S.shots[cur]; s.img = c.toDataURL("image/jpeg", .82); s.view = "img"; save(); renderMedia(); strip();
+  }; im.src = r.result; };
+  r.readAsDataURL(f);
+}
+
+// ---- events ----
+document.addEventListener("input", e => {
+  const f = e.target.dataset && e.target.dataset.f; if(!f || RO) return;
+  setp(S.shots[cur], f, e.target.value);
+  if(f === "title" || f === "info.duration"){ strip(); stats(); }
+  save();
+});
+document.addEventListener("change", e => {
+  const f = e.target.dataset && e.target.dataset.f; if(!f || RO) return;
+  const s = S.shots[cur];
+  if(f === "yt.url"){
+    s.yt.id = ytId(e.target.value); const t = ytT(e.target.value);
+    if(t != null && !s.yt.start){ s.yt.start = String(t); $("ystart").value = String(t); }
+    if(s.yt.id) s.view = "yt"; renderMedia(); strip();
+  } else if(f === "yt.start" || f === "yt.end") renderMedia();
+  save();
+});
+$("ptitle").oninput = e => { if(!RO){ S.title = e.target.value; save(); } };
+$("prev").onclick = () => go(cur - 1);
+$("next").onclick = () => cur === S.shots.length - 1 ? (RO || addShot()) : go(cur + 1);
+$("dtoggle").onclick = () => { document.body.classList.toggle("dopen"); $("dtoggle").firstChild.textContent = document.body.classList.contains("dopen") ? "▼ Shots " : "▲ Shots "; };
+$("modeBtn").onclick = () => { RO = !RO; renderAll(); };
+$("replay").onclick = () => renderMedia(true);
+$("rmImg").onclick = () => { S.shots[cur].img = ""; save(); renderMedia(); strip(); };
+$("imgF").onchange = e => setImage(e.target.files[0]);
+$("dup").onclick = () => { const c = JSON.parse(JSON.stringify(S.shots[cur])); c.id = blank().id; c.title += " (copy)"; S.shots.splice(cur+1, 0, c); cur++; save(); renderAll(); };
+$("del").onclick = () => {
+  if(S.shots.length < 2) return toast("A project needs at least one shot.");
+  if(confirm("Delete this shot?")){ S.shots.splice(cur, 1); cur = Math.min(cur, S.shots.length-1); save(); renderAll(); }
+};
+$("media").onclick = e => { const b = e.target.closest("[data-v]"); if(b){ S.shots[cur].view = b.dataset.v; save(); renderMedia(); } };
+$("media").addEventListener("dragover", e => e.preventDefault());
+$("media").addEventListener("drop", e => { e.preventDefault(); setImage(e.dataTransfer.files[0]); });
+document.addEventListener("paste", e => {
+  if(RO) return;
+  const it = [...((e.clipboardData && e.clipboardData.items) || [])].find(i => i.type.startsWith("image/"));
+  if(it){ e.preventDefault(); setImage(it.getAsFile()); }
+});
+$("strip").onclick = e => {
+  if(e.target.closest("#addTile")) return addShot();
+  const t = e.target.closest("[data-i]"); if(t) go(+t.dataset.i);
+};
+$("strip").addEventListener("dragstart", e => { const t = e.target.closest("[data-i]"); if(t) dragI = +t.dataset.i; });
+$("strip").addEventListener("dragover", e => e.preventDefault());
+$("strip").addEventListener("drop", e => {
+  e.preventDefault(); const t = e.target.closest("[data-i]");
+  if(!t || dragI == null || RO) return;
+  const to = +t.dataset.i, m = S.shots.splice(dragI, 1)[0]; S.shots.splice(to, 0, m);
+  cur = to; dragI = null; save(); renderAll();
+});
+document.addEventListener("keydown", e => {
+  if(/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if(e.key === "ArrowLeft") go(cur - 1);
+  if(e.key === "ArrowRight" && cur < S.shots.length - 1) go(cur + 1);
+});
+$("msrc").onchange = e => { if(RO) return; S.music.src = e.target.value.trim(); localAudio = null; save(); music(); };
+$("mfile").onchange = e => { const f = e.target.files[0]; if(f){ localAudio = {url:URL.createObjectURL(f), name:f.name}; music(); } };
+$("exportBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], {type:"application/json"}));
+  a.download = (S.title || "shot-plan").replace(/[^\w-]+/g, "_") + ".json"; a.click();
+};
+$("importF").onchange = e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { S = norm(JSON.parse(r.result)); cur = 0; save(); renderAll(); music(); toast("Project imported."); } catch(x){ toast("That file is not a valid project."); } };
+  r.readAsText(f);
+};
+
+// ---- start ----
+(async function(){
+  const p = new URLSearchParams(location.search).get("view");
+  if(p){
+    try { S = norm(await (await fetch(p)).json()); REMOTE = true; RO = true; $("modeBtn").style.display = "none"; }
+    catch(e){ toast("Could not load the shared plan."); }
+  } else {
+    try { const raw = localStorage.getItem(KEY); if(raw) S = norm(JSON.parse(raw)); } catch(e){}
+  }
+  INFO.forEach(([k,l,list]) => $("info").insertAdjacentHTML("beforeend", `<label>${l}<input data-f="info.${k}" ${list ? `list="${list}"` : ""}></label>`));
+  renderAll(); music();
+})();
+</script>
+</body>
+</html>
+
